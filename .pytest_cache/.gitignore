@@ -1,0 +1,39 @@
+# Created by pytest automatically.
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Node.js
+node_modules/
+dist/
+.vite/
+
+# IDE and operating system
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Test and coverage files
+.coverage
+htmlcov/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploaded files and local evidence
+uploads/
+evidence/

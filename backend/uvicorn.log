@@ -1,0 +1,92 @@
+INFO:     Started server process [4223]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+[SERVER LIFESPAN] Database tables initialized successfully.
+INFO:     127.0.0.1:50017 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50020 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50018 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50019 - "GET /api/v1/exams/student/analytics?email=sidharaj1416%40gmail.com&user_id=330ecfa0-5ec8-44a3-bc39-0682a837926b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50021 - "GET /api/v1/exams/student/analytics?email=alex.johnson%40university.edu&user_id=student-demo-01 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50025 - "GET /api/v1/exams/student/analytics?email=sidharaj1416%40gmail.com&user_id=330ecfa0-5ec8-44a3-bc39-0682a837926b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50022 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50028 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50032 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50032 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50032 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50033 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50033 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50036 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50051 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50050 - "GET /api/v1/exams/student/analytics?email=sidharaj1416%40gmail.com&user_id=330ecfa0-5ec8-44a3-bc39-0682a837926b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50049 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50054 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50059 - "GET /api/v1/exams/student/analytics?email=sidharaj1416%40gmail.com&user_id=330ecfa0-5ec8-44a3-bc39-0682a837926b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50066 - "GET /api/v1/exams/student/analytics?email=alex.johnson%40university.edu&user_id=student-demo-01 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50065 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50094 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50093 - "GET /api/v1/exams/student/analytics?email=sidharaj1416%40gmail.com&user_id=330ecfa0-5ec8-44a3-bc39-0682a837926b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50101 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50090 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50102 - "GET /api/v1/exams/student/analytics?email=sidharaj1416%40gmail.com&user_id=330ecfa0-5ec8-44a3-bc39-0682a837926b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50103 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50106 - "GET /api/v1/exams/student/analytics?email=alex.johnson%40university.edu&user_id=student-demo-01 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50109 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50154 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50153 - "GET /api/v1/exams/student/analytics?email=sidharaj1416%40gmail.com&user_id=330ecfa0-5ec8-44a3-bc39-0682a837926b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50152 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50159 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50160 - "GET /api/v1/exams/student/analytics?email=sidharaj1416%40gmail.com&user_id=330ecfa0-5ec8-44a3-bc39-0682a837926b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50163 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50169 - "GET /api/v1/exams/student/analytics?email=alex.johnson%40university.edu&user_id=student-demo-01 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50168 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50203 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50202 - "GET /api/v1/exams/student/analytics?email=sidharaj1416%40gmail.com&user_id=330ecfa0-5ec8-44a3-bc39-0682a837926b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50210 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50201 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50211 - "GET /api/v1/exams/student/analytics?email=sidharaj1416%40gmail.com&user_id=330ecfa0-5ec8-44a3-bc39-0682a837926b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50215 - "GET /api/v1/exams/student/analytics?email=alex.johnson%40university.edu&user_id=student-demo-01 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50212 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50218 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50327 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50326 - "GET /api/v1/exams/student/analytics?email=sidharaj1416%40gmail.com&user_id=330ecfa0-5ec8-44a3-bc39-0682a837926b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50325 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50328 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50329 - "GET /api/v1/exams/student/analytics?email=sidharaj1416%40gmail.com&user_id=330ecfa0-5ec8-44a3-bc39-0682a837926b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50333 - "GET /api/v1/exams/student/analytics?email=alex.johnson%40university.edu&user_id=student-demo-01 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50330 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50336 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50355 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50354 - "GET /api/v1/exams/student/analytics?email=sidharaj1416%40gmail.com&user_id=330ecfa0-5ec8-44a3-bc39-0682a837926b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50356 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50353 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50357 - "GET /api/v1/exams/student/analytics?email=sidharaj1416%40gmail.com&user_id=330ecfa0-5ec8-44a3-bc39-0682a837926b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50361 - "GET /api/v1/exams/student/analytics?email=alex.johnson%40university.edu&user_id=student-demo-01 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50359 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50364 - "GET /api/v1/exams HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50389 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50390 - "GET /api/v1/users/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51196 - "OPTIONS /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51198 - "OPTIONS /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51199 - "OPTIONS /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51196 - "GET /api/v1/health HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51200 - "OPTIONS /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51199 - "GET /api/v1/health HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51198 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51200 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51198 - "OPTIONS /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51198 - "POST /api/v1/auth/refresh HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51198 - "OPTIONS /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51198 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51198 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51198 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51198 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51198 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51198 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51198 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51198 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [4223]
