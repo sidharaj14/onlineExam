@@ -14,18 +14,23 @@ import {
   RefreshCw,
   X,
   AlertOctagon,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
 import { Card } from "../../components/common/Card";
 import { authService } from "../../services/authService";
+import { teacherService } from "../../services/teacherService";
 import { useAuthStore } from "../../store/useAuthStore";
 import { extractErrorMessage } from "../../services/api";
+
+type UserRoleOption = "student" | "teacher";
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { setAuth, loginAsDemo } = useAuthStore();
 
+  const [selectedRole, setSelectedRole] = useState<UserRoleOption>("student");
   const [authMode, setAuthMode] = useState<"password" | "otp">("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,6 +41,27 @@ export const LoginPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showPendingOtpPrompt, setShowPendingOtpPrompt] = useState(false);
+
+  const handleRoleChange = (role: UserRoleOption) => {
+    setSelectedRole(role);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setShowPendingOtpPrompt(false);
+  };
+
+  const handlePreFill = (role: UserRoleOption) => {
+    setSelectedRole(role);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setAuthMode("password");
+    if (role === "student") {
+      setEmail("student@example.com");
+      setPassword("student123");
+    } else {
+      setEmail("teacher@example.com");
+      setPassword("admin123");
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,24 +83,40 @@ export const LoginPage: React.FC = () => {
       setIsLoading(true);
 
       try {
-        const response = await authService.login({
-          email: cleanEmail,
-          password: password.trim(),
-        });
-        setAuth(response.access_token, response.user);
-
-        if (
-          response.user.role === "admin" ||
-          response.user.role === "super_admin" ||
-          response.user.role === "teacher"
-        ) {
-          navigate("/admin/dashboard");
+        if (selectedRole === "teacher") {
+          // Dedicated teacher authentication
+          const response = await teacherService.loginTeacherWithPassword(cleanEmail, password.trim());
+          setAuth(response.access_token, response.user);
+          if (response.user.role === "admin" || response.user.role === "super_admin") {
+            navigate("/admin/dashboard");
+          } else {
+            navigate("/teacher/dashboard");
+          }
         } else {
+          // Standard student authentication
+          const response = await authService.login({
+            email: cleanEmail,
+            password: password.trim(),
+          });
+
+          if (response.user.role !== "student") {
+            setErrorMessage(
+              `This account has faculty/administrator permissions (${response.user.role}). Please select 'Login as Teacher' to enter.`
+            );
+            setIsLoading(false);
+            return;
+          }
+
+          setAuth(response.access_token, response.user);
           navigate("/student/dashboard");
         }
       } catch (err: any) {
         const msg = extractErrorMessage(err);
-        setErrorMessage(msg);
+        if (selectedRole === "teacher" && (msg.toLowerCase().includes("not authorized") || msg.toLowerCase().includes("denied"))) {
+          setErrorMessage("Unauthorized account role. Please use student login.");
+        } else {
+          setErrorMessage(msg);
+        }
         if (msg.toLowerCase().includes("pending") || msg.toLowerCase().includes("otp")) {
           setShowPendingOtpPrompt(true);
         }
@@ -93,20 +135,35 @@ export const LoginPage: React.FC = () => {
       setIsLoading(true);
 
       try {
-        const response = await authService.loginWithOtp(cleanEmail, otpCode.trim());
-        setAuth(response.access_token, response.user);
-
-        if (
-          response.user.role === "admin" ||
-          response.user.role === "super_admin" ||
-          response.user.role === "teacher"
-        ) {
-          navigate("/admin/dashboard");
+        if (selectedRole === "teacher") {
+          const response = await teacherService.loginTeacherWithOtp(cleanEmail, otpCode.trim());
+          setAuth(response.access_token, response.user);
+          if (response.user.role === "admin" || response.user.role === "super_admin") {
+            navigate("/admin/dashboard");
+          } else {
+            navigate("/teacher/dashboard");
+          }
         } else {
+          const response = await authService.loginWithOtp(cleanEmail, otpCode.trim());
+
+          if (response.user.role !== "student") {
+            setErrorMessage(
+              `This account has faculty/administrator permissions (${response.user.role}). Please select 'Login as Teacher' to enter.`
+            );
+            setIsLoading(false);
+            return;
+          }
+
+          setAuth(response.access_token, response.user);
           navigate("/student/dashboard");
         }
       } catch (err: any) {
-        setErrorMessage(extractErrorMessage(err));
+        const msg = extractErrorMessage(err);
+        if (selectedRole === "teacher" && (msg.toLowerCase().includes("not authorized") || msg.toLowerCase().includes("denied"))) {
+          setErrorMessage("Unauthorized account role. Please use student login.");
+        } else {
+          setErrorMessage(msg);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -125,22 +182,61 @@ export const LoginPage: React.FC = () => {
     setIsSendingOtp(true);
 
     try {
-      const res = await authService.requestLoginOtp(cleanEmail);
-      setSuccessMessage(res.message || "A 6-digit verification code has been dispatched to your email.");
+      if (selectedRole === "teacher") {
+        const res = await teacherService.requestTeacherOtp(cleanEmail);
+        setSuccessMessage(
+          res.message || "A 6-digit faculty verification code has been dispatched to your email."
+        );
+      } else {
+        const res = await authService.requestLoginOtp(cleanEmail);
+        setSuccessMessage(
+          res.message || "A 6-digit verification code has been dispatched to your email."
+        );
+      }
       setAuthMode("otp");
     } catch (err: any) {
-      setErrorMessage(extractErrorMessage(err));
+      const msg = extractErrorMessage(err);
+      if (selectedRole === "teacher" && (msg.toLowerCase().includes("not authorized") || msg.toLowerCase().includes("not registered"))) {
+        setErrorMessage("Unauthorized account role. Please use student login.");
+      } else {
+        setErrorMessage(msg);
+      }
     } finally {
       setIsSendingOtp(false);
     }
   };
 
-  const handleDemoSignIn = (role: "student" | "admin") => {
-    loginAsDemo(role);
-    if (role === "admin") {
-      navigate("/admin/dashboard");
-    } else {
-      navigate("/student/dashboard");
+  const handleDemoSignIn = async (role: "student" | "teacher" | "admin") => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      if (role === "teacher") {
+        const res = await teacherService.loginTeacherWithPassword("teacher@example.com", "admin123");
+        setAuth(res.access_token, res.user);
+        navigate("/teacher/dashboard");
+        return;
+      } else if (role === "admin") {
+        const res = await authService.login({ email: "admin@example.com", password: "admin123" });
+        setAuth(res.access_token, res.user);
+        navigate("/admin/dashboard");
+        return;
+      } else {
+        const res = await authService.login({ email: "student@example.com", password: "student123" });
+        setAuth(res.access_token, res.user);
+        navigate("/student/dashboard");
+        return;
+      }
+    } catch {
+      loginAsDemo(role);
+      if (role === "teacher") {
+        navigate("/teacher/dashboard");
+      } else if (role === "admin") {
+        navigate("/admin/dashboard");
+      } else {
+        navigate("/student/dashboard");
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -180,6 +276,66 @@ export const LoginPage: React.FC = () => {
 
       <div className="mt-4 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
         <Card className="py-7 px-6 sm:px-8 shadow-sm border border-slate-200 bg-white rounded-xl">
+          {/* Role Selection: Login as Student vs Login as Teacher */}
+          <div className="mb-5">
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+              Select Portal Role
+            </label>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => handleRoleChange("student")}
+                className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                  selectedRole === "student"
+                    ? "border-indigo-600 bg-indigo-50/70 text-indigo-950 ring-2 ring-indigo-500/20 shadow-xs"
+                    : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <div
+                    className={`w-6 h-6 rounded-md flex items-center justify-center ${
+                      selectedRole === "student"
+                        ? "bg-indigo-600 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    <GraduationCap className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-xs font-bold">Login as Student</span>
+                </div>
+                <span className="text-[10px] text-slate-500 line-clamp-1">
+                  Candidate & test evaluations
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleRoleChange("teacher")}
+                className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                  selectedRole === "teacher"
+                    ? "border-indigo-600 bg-indigo-50/70 text-indigo-950 ring-2 ring-indigo-500/20 shadow-xs"
+                    : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <div
+                    className={`w-6 h-6 rounded-md flex items-center justify-center ${
+                      selectedRole === "teacher"
+                        ? "bg-indigo-600 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    <Briefcase className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-xs font-bold">Login as Teacher</span>
+                </div>
+                <span className="text-[10px] text-slate-500 line-clamp-1">
+                  Faculty author & proctor
+                </span>
+              </button>
+            </div>
+          </div>
+
           {/* Sign-In Mode Switcher (Password vs OTP) */}
           <div className="flex rounded-lg bg-slate-100 p-1 mb-5">
             <button
@@ -263,15 +419,28 @@ export const LoginPage: React.FC = () => {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Institutional Email
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  {selectedRole === "teacher" ? "Faculty Email" : "Institutional Student Email"}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handlePreFill(selectedRole)}
+                  className="text-[11px] text-indigo-600 hover:text-indigo-750 font-medium inline-flex items-center gap-1 cursor-pointer"
+                  title="Pre-fill standard credentials for this role"
+                >
+                  <Sparkles className="w-3 h-3 text-indigo-500" />
+                  <span>Fill {selectedRole === "teacher" ? "Teacher" : "Student"} Creds</span>
+                </button>
+              </div>
               <div className="relative">
                 <Input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@university.edu"
+                  placeholder={
+                    selectedRole === "teacher" ? "teacher@example.com" : "student@example.com"
+                  }
                   required
                   className="pl-9 text-xs"
                 />
@@ -353,7 +522,11 @@ export const LoginPage: React.FC = () => {
               className="w-full font-bold shadow-xs mt-2"
               isLoading={isLoading}
             >
-              <span>{authMode === "password" ? "Sign In to Portal" : "Verify OTP & Sign In"}</span>
+              <span>
+                {authMode === "password"
+                  ? `Sign In as ${selectedRole === "teacher" ? "Teacher" : "Student"}`
+                  : `Verify & Enter ${selectedRole === "teacher" ? "Teacher Portal" : "Student Portal"}`}
+              </span>
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </form>
@@ -361,24 +534,24 @@ export const LoginPage: React.FC = () => {
           {/* Academic Demo Evaluation Section */}
           <div className="mt-6 pt-5 border-t border-slate-100">
             <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 text-center">
-              Evaluation Demo Quick-Access
+              1-Click Demo Evaluation Quick Access
             </span>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => handleDemoSignIn("student")}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 text-xs font-semibold transition-all cursor-pointer"
               >
                 <GraduationCap className="w-4 h-4 text-indigo-600" />
-                <span>Candidate Demo</span>
+                <span>Student Demo</span>
               </button>
               <button
                 type="button"
-                onClick={() => handleDemoSignIn("admin")}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                onClick={() => handleDemoSignIn("teacher")}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 text-xs font-semibold transition-all cursor-pointer"
               >
                 <Briefcase className="w-4 h-4 text-slate-700" />
-                <span>Faculty Demo</span>
+                <span>Teacher Demo</span>
               </button>
             </div>
           </div>
@@ -387,7 +560,7 @@ export const LoginPage: React.FC = () => {
             <p className="text-xs text-slate-500">
               Don't have an account?{" "}
               <Link to="/register" className="font-semibold text-indigo-600 hover:text-indigo-700">
-                Sign Up here
+                Sign Up as Student
               </Link>
             </p>
           </div>

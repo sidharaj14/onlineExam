@@ -16,10 +16,37 @@ def check_and_migrate_db(connection):
         cursor = raw_conn.cursor()
         cursor.execute("PRAGMA table_info(exam_attempts);")
         cols = [r[1] for r in cursor.fetchall()]
-        if cols and "integrity_score" not in cols:
-            cursor.execute("ALTER TABLE exam_attempts ADD COLUMN integrity_score FLOAT DEFAULT 100.0;")
+        if cols:
+            if "integrity_score" not in cols:
+                cursor.execute("ALTER TABLE exam_attempts ADD COLUMN integrity_score FLOAT DEFAULT 100.0;")
+                raw_conn.commit()
+                print("[MIGRATION] Added integrity_score column to exam_attempts table.")
+            if "attempt_number" not in cols:
+                cursor.execute("ALTER TABLE exam_attempts ADD COLUMN attempt_number INTEGER DEFAULT 1;")
+                raw_conn.commit()
+                print("[MIGRATION] Added attempt_number column to exam_attempts table.")
+            if "last_activity_at" not in cols:
+                cursor.execute("ALTER TABLE exam_attempts ADD COLUMN last_activity_at DATETIME;")
+                raw_conn.commit()
+                print("[MIGRATION] Added last_activity_at column to exam_attempts table.")
+            if "percentage" not in cols:
+                cursor.execute("ALTER TABLE exam_attempts ADD COLUMN percentage FLOAT;")
+                raw_conn.commit()
+                print("[MIGRATION] Added percentage column to exam_attempts table.")
+            if "grading_status" not in cols:
+                cursor.execute("ALTER TABLE exam_attempts ADD COLUMN grading_status VARCHAR(30) DEFAULT 'AUTO_GRADED';")
+                raw_conn.commit()
+                print("[MIGRATION] Added grading_status column to exam_attempts table.")
+            if "termination_reason" not in cols:
+                cursor.execute("ALTER TABLE exam_attempts ADD COLUMN termination_reason VARCHAR(255);")
+                raw_conn.commit()
+                print("[MIGRATION] Added termination_reason column to exam_attempts table.")
+
+            # Backfill percentage where score and total_marks exist
+            cursor.execute("UPDATE exam_attempts SET percentage = ROUND((score / total_marks) * 100, 2) WHERE percentage IS NULL AND total_marks > 0 AND score IS NOT NULL;")
+            # Backfill user_id from users table matching candidate_email
+            cursor.execute("UPDATE exam_attempts SET user_id = (SELECT id FROM users WHERE LOWER(users.email) = LOWER(exam_attempts.candidate_email) LIMIT 1) WHERE user_id IS NULL;")
             raw_conn.commit()
-            print("[MIGRATION] Added integrity_score column to exam_attempts table.")
 
         cursor.execute("PRAGMA table_info(students);")
         student_cols = [r[1] for r in cursor.fetchall()]
@@ -32,6 +59,26 @@ def check_and_migrate_db(connection):
                 cursor.execute("ALTER TABLE students ADD COLUMN semester INTEGER DEFAULT 1;")
                 raw_conn.commit()
                 print("[MIGRATION] Added semester column to students table.")
+
+        cursor.execute("PRAGMA table_info(exams);")
+        exam_cols = [r[1] for r in cursor.fetchall()]
+        if exam_cols:
+            if "status" not in exam_cols:
+                cursor.execute("ALTER TABLE exams ADD COLUMN status VARCHAR(30) DEFAULT 'PUBLISHED';")
+                raw_conn.commit()
+                print("[MIGRATION] Added status column to exams table.")
+            if "start_time" not in exam_cols:
+                cursor.execute("ALTER TABLE exams ADD COLUMN start_time DATETIME;")
+                raw_conn.commit()
+                print("[MIGRATION] Added start_time column to exams table.")
+            if "end_time" not in exam_cols:
+                cursor.execute("ALTER TABLE exams ADD COLUMN end_time DATETIME;")
+                raw_conn.commit()
+                print("[MIGRATION] Added end_time column to exams table.")
+
+            # Assign unassigned default exams to demo teacher
+            cursor.execute("UPDATE exams SET created_by_id = 'demo-teacher-01' WHERE created_by_id IS NULL;")
+            raw_conn.commit()
     except Exception as e:
         print(f"[MIGRATION WARNING] {e}")
 

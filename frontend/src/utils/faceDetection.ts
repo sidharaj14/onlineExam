@@ -25,7 +25,7 @@ export interface CandidateBaseline {
 export interface FaceDetectionResult {
   faceCount: number;
   faces: BoundingBox[];
-  status: "VERIFIED" | "NO_FACE" | "MULTIPLE_FACES" | "POOR_LIGHTING" | "PHONE_DETECTED" | "SUSPICIOUS_MOVEMENT";
+  status: "VERIFIED" | "NO_FACE" | "MULTIPLE_FACES" | "POOR_LIGHTING" | "PHONE_DETECTED" | "SUSPICIOUS_MOVEMENT" | "CHECKING" | "CAMERA_UNAVAILABLE";
   message: string;
   lightingScore: number;
   isCentered: boolean;

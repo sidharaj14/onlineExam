@@ -31,6 +31,20 @@ const DEFAULT_ADMIN_USER: UserProfile = {
   },
 };
 
+const DEFAULT_TEACHER_USER: UserProfile = {
+  id: "demo-teacher-01",
+  email: "teacher@example.com",
+  full_name: "Prof. David Mitchell",
+  role: "teacher",
+  is_active: true,
+  is_verified: true,
+  avatar_url: null,
+  admin_profile: {
+    employee_code: "FAC-102",
+    admin_level: "Professor & Invigilator",
+  },
+};
+
 interface AuthState {
   user: UserProfile;
   token: string | null;
@@ -40,7 +54,7 @@ interface AuthState {
   logout: () => void;
   checkAuth: () => Promise<void>;
   // Test helper method to seed demo session
-  loginAsDemo: (role: "student" | "admin") => void;
+  loginAsDemo: (role: "student" | "admin" | "teacher") => void;
 }
 
 const getInitialUser = (): UserProfile => {
@@ -62,7 +76,7 @@ const getInitialToken = (): string | null => {
 export const useAuthStore = create<AuthState>((set) => ({
   user: getInitialUser(),
   token: getInitialToken(),
-  isAuthenticated: !!localStorage.getItem("access_token") || true, // default active session for demo convenience
+  isAuthenticated: !!localStorage.getItem("access_token"),
   isLoading: false,
 
   setAuth: (token: string, user: UserProfile) => {
@@ -71,8 +85,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ token, user, isAuthenticated: true, isLoading: false });
   },
 
-  loginAsDemo: (role: "student" | "admin") => {
-    const demoUser = role === "admin" ? DEFAULT_ADMIN_USER : DEFAULT_STUDENT_USER;
+  loginAsDemo: (role: "student" | "admin" | "teacher") => {
+    const demoUser = role === "teacher" ? DEFAULT_TEACHER_USER : role === "admin" ? DEFAULT_ADMIN_USER : DEFAULT_STUDENT_USER;
     const demoToken = `demo-${role}-jwt-token`;
     localStorage.setItem("access_token", demoToken);
     localStorage.setItem("user_profile", JSON.stringify(demoUser));

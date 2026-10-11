@@ -470,6 +470,18 @@ export const ExamTakingPage: React.FC = () => {
             // ignore
           }
         }
+      } else if (!isCameraActive || cameraError) {
+        setFaceStatus((prev) => {
+          if (prev?.status === "CAMERA_UNAVAILABLE") return prev;
+          return {
+            faceCount: 0,
+            faces: [],
+            status: "CAMERA_UNAVAILABLE",
+            message: cameraError || "Camera unavailable",
+            lightingScore: 0,
+            isCentered: false,
+          };
+        });
       }
     }, 500);
 
@@ -1028,27 +1040,43 @@ export const ExamTakingPage: React.FC = () => {
 
               {/* Status Pills */}
               <div className="absolute top-2 left-2 flex items-center gap-1.5 pointer-events-none">
-                <div className="bg-slate-900/90 backdrop-blur-xs px-2 py-0.5 rounded-full border border-emerald-500/40 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  AI Proctor
-                </div>
+                {(!faceStatus || faceStatus.status === "VERIFIED") && (
+                  <div className="bg-slate-900/90 backdrop-blur-xs px-2.5 py-0.5 rounded-full border border-emerald-500/40 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Camera active — face detected
+                  </div>
+                )}
+
+                {faceStatus?.status === "CHECKING" && (
+                  <div className="bg-slate-900/90 backdrop-blur-xs text-sky-300 border border-sky-500/40 px-2.5 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+                    Checking face position...
+                  </div>
+                )}
+
+                {faceStatus?.status === "NO_FACE" && (
+                  <div className="bg-amber-950/90 text-amber-300 border border-amber-500/40 px-2.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse flex items-center gap-1.5">
+                    <EyeOff className="w-3 h-3 text-amber-400" />
+                    Face not detected — please position your face in the camera
+                  </div>
+                )}
+
+                {(cameraError || faceStatus?.status === "CAMERA_UNAVAILABLE") && (
+                  <div className="bg-rose-950/90 text-rose-300 border border-rose-500/40 px-2.5 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1.5">
+                    <AlertTriangle className="w-3 h-3 text-rose-400" />
+                    Camera unavailable
+                  </div>
+                )}
 
                 {faceStatus?.status === "MULTIPLE_FACES" && (
-                  <div className="bg-rose-950/90 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded-full text-[10px] font-bold animate-pulse flex items-center gap-1">
+                  <div className="bg-rose-950/90 text-rose-300 border border-rose-500/40 px-2.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse flex items-center gap-1.5">
                     <Users className="w-3 h-3 text-rose-400" />
                     2+ Faces Alert
                   </div>
                 )}
 
-                {faceStatus?.status === "NO_FACE" && (
-                  <div className="bg-amber-950/90 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full text-[10px] font-bold animate-pulse flex items-center gap-1">
-                    <EyeOff className="w-3 h-3 text-amber-400" />
-                    No Face
-                  </div>
-                )}
-
                 {(faceStatus?.status === "PHONE_DETECTED" || faceStatus?.status === "SUSPICIOUS_MOVEMENT") && (
-                  <div className="bg-rose-950/90 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded-full text-[10px] font-bold animate-pulse flex items-center gap-1">
+                  <div className="bg-rose-950/90 text-rose-300 border border-rose-500/40 px-2.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse flex items-center gap-1.5">
                     <Smartphone className="w-3 h-3 text-rose-400" />
                     Device / Hand Alert
                   </div>

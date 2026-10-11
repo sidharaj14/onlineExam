@@ -13,12 +13,12 @@ import { Card } from "../../components/common/Card";
 import { Button } from "../../components/common/Button";
 import { examService } from "../../services/examService";
 import { useAuthStore } from "../../store/useAuthStore";
-import type { StudentAnalytics } from "../../types/exam.types";
+import type { StudentAttemptHistoryItem } from "../../types/exam.types";
 
 export const StudentAttemptsPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const [analytics, setAnalytics] = useState<StudentAnalytics | null>(null);
+  const [attempts, setAttempts] = useState<StudentAttemptHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "passed" | "failed">("all");
 
@@ -29,16 +29,40 @@ export const StudentAttemptsPage: React.FC = () => {
   const loadAttempts = async () => {
     try {
       setLoading(true);
-      const data = await examService.getStudentAnalytics(user?.email, user?.id);
-      setAnalytics(data);
+      try {
+        const data = await examService.getStudentAttemptsList();
+        setAttempts(data);
+      } catch (apiErr) {
+        // Fallback to basic analytics
+        const basicAnalytics = await examService.getStudentAnalytics(user?.email, user?.id);
+        setAttempts(
+          basicAnalytics.recent_attempts.map((att, idx) => ({
+            attempt_id: att.attempt_id,
+            exam_id: att.exam_id,
+            exam_title: att.exam_title,
+            course_code: att.course_code,
+            attempt_number: idx + 1,
+            status: att.status,
+            grading_status: "COMPLETED",
+            marks_obtained: att.score,
+            score: att.score,
+            total_marks: att.total_marks,
+            percentage: att.percentage,
+            passed: att.passed,
+            started_at: att.started_at,
+            submitted_at: att.submitted_at,
+            violations_count: att.violations_count,
+            integrity_score: att.integrity_score || 100,
+            can_resume: false,
+          }))
+        );
+      }
     } catch (err) {
       console.error("Error loading attempts:", err);
     } finally {
       setLoading(false);
     }
   };
-
-  const attempts = analytics?.recent_attempts || [];
   const filteredAttempts = attempts.filter((att) => {
     if (filter === "passed") return att.passed;
     if (filter === "failed") return !att.passed;
@@ -153,7 +177,7 @@ export const StudentAttemptsPage: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4 text-center font-bold text-slate-800">
-                      <span>{att.score}</span>
+                      <span>{att.marks_obtained ?? att.score}</span>
                       <span className="text-slate-400 font-normal"> / {att.total_marks}</span>
                     </td>
 
@@ -210,13 +234,23 @@ export const StudentAttemptsPage: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4 text-right">
-                      <Link
-                        to={`/exams/${att.attempt_id}/result`}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs border border-indigo-200 transition-colors"
-                      >
-                        <span>View Result</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </Link>
+                      {att.can_resume ? (
+                        <Button
+                          size="sm"
+                          onClick={() => navigate(`/exams/${att.attempt_id}/take`)}
+                          className="bg-amber-600 hover:bg-amber-700 text-white text-xs py-1 px-3 h-auto"
+                        >
+                          Resume
+                        </Button>
+                      ) : (
+                        <Link
+                          to={`/exams/${att.attempt_id}/result`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs border border-indigo-200 transition-colors"
+                        >
+                          <span>View Result</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 ))}

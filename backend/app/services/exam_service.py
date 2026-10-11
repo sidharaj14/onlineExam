@@ -6,8 +6,7 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
 
 from fastapi import HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_, desc
 from sqlalchemy.orm import selectinload
 
 from app.db.models.exam import (
@@ -18,6 +17,7 @@ from app.db.models.exam import (
     ProctoringViolation,
     SecurityAuditLog,
 )
+from app.services.activity_service import ActivityService
 from app.schemas.exam import (
     StartExamRequest,
     SaveAnswerRequest,
@@ -208,16 +208,91 @@ class ExamService:
         )
 
     @staticmethod
+    async def get_active_attempt_for_student(
+        exam_id: str,
+        user_id: Optional[str],
+        email: Optional[str],
+        db: AsyncSession
+    ) -> Optional[str]:
+        """Check if candidate already has an in-progress, unexpired session for this exam."""
+        query = select(ExamAttempt).where(
+            ExamAttempt.exam_id == exam_id,
+            ExamAttempt.status == "IN_PROGRESS"
+        )
+        if user_id and email:
+            query = query.where(
+                or_(
+                    ExamAttempt.user_id == user_id,
+                    func.lower(ExamAttempt.candidate_email) == email.lower()
+                )
+            )
+        elif user_id:
+            query = query.where(ExamAttempt.user_id == user_id)
+        elif email:
+            query = query.where(func.lower(ExamAttempt.candidate_email) == email.lower())
+        else:
+            return None
+
+        query = query.order_by(desc(ExamAttempt.started_at))
+        att = (await db.execute(query)).scalars().first()
+        if att:
+            exam = await db.get(Exam, exam_id)
+            if exam:
+                st = att.started_at.replace(tzinfo=timezone.utc) if att.started_at.tzinfo is None else att.started_at
+                elapsed = (datetime.now(timezone.utc) - st).total_seconds()
+                if elapsed < exam.duration_minutes * 60:
+                    return att.id
+        return None
+
+    @staticmethod
     async def start_exam_attempt(
         exam_id: str,
         payload: StartExamRequest,
         db: AsyncSession,
         user_id: Optional[str] = None
     ) -> str:
-        """Initializes a new exam attempt with camera verification photo saved."""
+        """Initializes a new exam attempt or safely resumes an active in-progress session."""
         exam = await db.get(Exam, exam_id)
         if not exam or not exam.is_active:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not available or inactive")
+
+        # 1. Resume check: If student already has an active, unexpired attempt, return it (prevent duplicate on refresh)
+        active_id = await ExamService.get_active_attempt_for_student(
+            exam_id=exam.id,
+            user_id=user_id,
+            email=payload.candidate_email,
+            db=db
+        )
+        if active_id:
+            active_att = await db.get(ExamAttempt, active_id)
+            if active_att:
+                if user_id and not active_att.user_id:
+                    active_att.user_id = user_id
+                active_att.last_activity_at = datetime.now(timezone.utc)
+                await db.commit()
+                if user_id:
+                    await ActivityService.record_activity(
+                        db=db,
+                        user_id=user_id,
+                        activity_type="ATTEMPT_STARTED",
+                        title=f"Resumed {exam.title}",
+                        description=f"Returned to in-progress examination session (Attempt #{active_att.attempt_number}).",
+                        exam_id=exam.id,
+                        attempt_id=active_att.id,
+                        status="INFO",
+                    )
+                return active_att.id
+
+        # 2. Count prior attempts for this candidate on this exam
+        count_stmt = select(func.count(ExamAttempt.id)).where(
+            ExamAttempt.exam_id == exam.id,
+            or_(
+                (ExamAttempt.user_id == user_id) if user_id else False,
+                func.lower(ExamAttempt.candidate_email) == payload.candidate_email.lower()
+            )
+        )
+        prev_count = (await db.execute(count_stmt)).scalar() or 0
+        attempt_number = prev_count + 1
 
         photo_url = None
         if payload.verification_photo_base64:
@@ -246,12 +321,15 @@ class ExamService:
             candidate_email=payload.candidate_email,
             verification_photo_url=photo_url,
             status="IN_PROGRESS",
+            attempt_number=attempt_number,
             total_marks=exam.total_marks,
             integrity_score=100.0,
             started_at=datetime.now(timezone.utc),
+            last_activity_at=datetime.now(timezone.utc),
             answers_json="{}",
             violations_count=0,
             violations_json="[]",
+            grading_status="AUTO_GRADED",
         )
         db.add(attempt)
         await db.flush()
@@ -259,9 +337,33 @@ class ExamService:
         audit = SecurityAuditLog(
             user_id=attempt.user_id,
             action="EXAM_START",
-            details_json=json.dumps({"attempt_id": attempt.id, "exam_id": exam.id, "candidate_email": payload.candidate_email}),
+            details_json=json.dumps({
+                "attempt_id": attempt.id,
+                "exam_id": exam.id,
+                "candidate_email": payload.candidate_email,
+                "attempt_number": attempt_number,
+            }),
         )
         db.add(audit)
+
+        if user_id:
+            await ActivityService.record_activity(
+                db=db,
+                user_id=user_id,
+                activity_type="ATTEMPT_STARTED",
+                title=f"Started {exam.title}",
+                description=f"Verified facial identity and launched exam session (Attempt #{attempt_number}).",
+                exam_id=exam.id,
+                attempt_id=attempt.id,
+                status="INFO",
+                details={
+                    "course_code": exam.course_code,
+                    "duration_minutes": exam.duration_minutes,
+                    "attempt_number": attempt_number,
+                },
+                commit=False,
+            )
+
         await db.commit()
         await db.refresh(attempt)
         return attempt.id
@@ -369,7 +471,22 @@ class ExamService:
             )
             db.add(new_ans)
 
+        attempt.last_activity_at = datetime.now(timezone.utc)
         await db.commit()
+
+        if attempt.user_id:
+            await ActivityService.record_activity(
+                db=db,
+                user_id=attempt.user_id,
+                activity_type="ANSWER_SAVED",
+                title="Saved answer response",
+                description=f"Autosaved answer for question. Total questions answered: {len(answers)}",
+                exam_id=attempt.exam_id,
+                attempt_id=attempt.id,
+                status="INFO",
+                details={"saved_answers_count": len(answers), "question_id": payload.question_id},
+            )
+
         return {"status": "saved", "question_id": payload.question_id, "saved_answers_count": len(answers)}
 
     @staticmethod
@@ -425,12 +542,52 @@ class ExamService:
         passed = total_score >= exam.passing_marks
         attempt.score = total_score
         attempt.total_marks = calculated_total_marks
+        percentage = round((total_score / calculated_total_marks * 100), 2) if calculated_total_marks > 0 else 0.0
+        attempt.percentage = percentage
         attempt.passed = passed
+        attempt.grading_status = "AUTO_GRADED"
+        attempt.last_activity_at = datetime.now(timezone.utc)
         if attempt.status != "TERMINATED_VIOLATION":
             attempt.status = "SUBMITTED"
         attempt.submitted_at = datetime.now(timezone.utc)
         await db.commit()
         await db.refresh(attempt)
+
+        if attempt.user_id:
+            status_desc = "Passed" if passed else "Did not pass"
+            await ActivityService.record_activity(
+                db=db,
+                user_id=attempt.user_id,
+                activity_type="EXAM_SUBMITTED",
+                title=f"Submitted {exam.title}",
+                description=f"Score: {total_score}/{calculated_total_marks} ({percentage}%) - {status_desc}",
+                exam_id=exam.id,
+                attempt_id=attempt.id,
+                status="SUCCESS" if passed else "WARNING",
+                details={
+                    "score": total_score,
+                    "total_marks": calculated_total_marks,
+                    "percentage": percentage,
+                    "passed": passed,
+                    "integrity_score": attempt.integrity_score,
+                    "violations_count": attempt.violations_count
+                }
+            )
+            await ActivityService.record_activity(
+                db=db,
+                user_id=attempt.user_id,
+                activity_type="EXAM_GRADED",
+                title=f"Grading finalized for {exam.title}",
+                description=f"Automated evaluation completed: {total_score} marks ({percentage}%).",
+                exam_id=exam.id,
+                attempt_id=attempt.id,
+                status="INFO",
+                details={
+                    "score": total_score,
+                    "percentage": percentage,
+                    "grading_status": "AUTO_GRADED"
+                }
+            )
 
         time_spent_seconds = int((attempt.submitted_at.replace(tzinfo=timezone.utc) - attempt.started_at.replace(tzinfo=timezone.utc)).total_seconds())
         percentage = round((total_score / calculated_total_marks * 100), 2) if calculated_total_marks > 0 else 0.0
@@ -637,10 +794,39 @@ class ExamService:
         db.add(audit)
 
         terminated = False
+        if attempt.user_id:
+            await ActivityService.record_activity(
+                db=db,
+                user_id=attempt.user_id,
+                activity_type="VIOLATION_RECORDED",
+                title=f"Proctoring Warning #{current_count}: {payload.violation_type}",
+                description=payload.message or "Suspicious proctoring behavior detected.",
+                exam_id=attempt.exam_id,
+                attempt_id=attempt.id,
+                status="WARNING" if current_count < 3 else "CRITICAL",
+                details={
+                    "strike_number": current_count,
+                    "violation_type": payload.violation_type,
+                    "integrity_score": attempt.integrity_score
+                }
+            )
+
         if current_count >= 3:
             terminated = True
             attempt.status = "TERMINATED_VIOLATION"
+            attempt.termination_reason = "Maximum proctoring integrity violations reached (3 strikes)"
             await db.commit()
+            if attempt.user_id:
+                await ActivityService.record_activity(
+                    db=db,
+                    user_id=attempt.user_id,
+                    activity_type="AUTO_TERMINATED",
+                    title="Examination Terminated by Proctor",
+                    description="Maximum violation limit reached (3 strikes). Exam locked.",
+                    exam_id=attempt.exam_id,
+                    attempt_id=attempt.id,
+                    status="CRITICAL"
+                )
             # Grade answers up to termination point
             await ExamService.submit_exam(attempt_id, db)
         else:
@@ -662,6 +848,7 @@ class ExamService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
 
         attempt.status = "TERMINATED_VIOLATION"
+        attempt.termination_reason = reason
         attempt.violations_count = max(3, (attempt.violations_count or 0) + 1)
         violations_list = json.loads(attempt.violations_json) if attempt.violations_json else []
         violations_list.append({
@@ -672,6 +859,19 @@ class ExamService:
         })
         attempt.violations_json = json.dumps(violations_list)
         await db.commit()
+
+        if attempt.user_id:
+            await ActivityService.record_activity(
+                db=db,
+                user_id=attempt.user_id,
+                activity_type="AUTO_TERMINATED",
+                title="Examination Force-Terminated",
+                description=reason,
+                exam_id=attempt.exam_id,
+                attempt_id=attempt.id,
+                status="CRITICAL"
+            )
+
         await ExamService.submit_exam(attempt_id, db)
         return {"status": "TERMINATED_VIOLATION", "violations_count": attempt.violations_count}
 

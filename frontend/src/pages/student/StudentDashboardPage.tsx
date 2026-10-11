@@ -7,19 +7,26 @@ import {
   ArrowRight,
   FileText,
   Award,
-  Sparkles,
   TrendingUp,
   BarChart3,
   CheckCircle,
-  XCircle,
   PlayCircle,
   Calendar,
   ChevronRight,
   Zap,
+  AlertTriangle,
+  LogIn,
+  Eye,
+  Save,
+  Activity,
+  RotateCcw,
 } from "lucide-react";
 import { useAuthStore } from "../../store/useAuthStore";
 import { examService } from "../../services/examService";
-import type { Exam, StudentAnalytics } from "../../types/exam.types";
+import type {
+  Exam,
+  StudentFullDashboardResponse,
+} from "../../types/exam.types";
 import { Button } from "../../components/common/Button";
 import { Card } from "../../components/common/Card";
 import { StudentPortalLayout } from "../../components/layout/StudentPortalLayout";
@@ -29,9 +36,9 @@ export const StudentDashboardPage: React.FC = () => {
   const { user } = useAuthStore();
 
   const [exams, setExams] = useState<Exam[]>([]);
-  const [analytics, setAnalytics] = useState<StudentAnalytics | null>(null);
+  const [dashboardData, setDashboardData] = useState<StudentFullDashboardResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [showDemoMock, setShowDemoMock] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -40,91 +47,192 @@ export const StudentDashboardPage: React.FC = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [examsData, analyticsData] = await Promise.allSettled([
+      setError(null);
+      const [examsRes, fullDashboardRes] = await Promise.allSettled([
         examService.getAvailableExams(),
-        examService.getStudentAnalytics(user?.email, user?.id),
+        examService.getStudentFullDashboard(),
       ]);
 
-      if (examsData.status === "fulfilled") {
-        setExams(examsData.value);
+      if (examsRes.status === "fulfilled") {
+        setExams(examsRes.value);
       }
 
-      if (analyticsData.status === "fulfilled") {
-        setAnalytics(analyticsData.value);
+      if (fullDashboardRes.status === "fulfilled") {
+        setDashboardData(fullDashboardRes.value);
+      } else {
+        // Fallback to student analytics if full dashboard fails
+        console.warn("Full dashboard fetch failed, falling back to basic analytics:", fullDashboardRes.reason);
+        const basicAnalytics = await examService.getStudentAnalytics(user?.email, user?.id);
+        setDashboardData({
+          student_id: user?.id || "student-01",
+          student_name: user?.full_name || "Candidate",
+          student_email: user?.email || "",
+          summary: {
+            total_exams_attempted: basicAnalytics.total_tests_taken,
+            exams_completed: basicAnalytics.total_tests_taken,
+            exams_in_progress: 0,
+            average_score: basicAnalytics.average_score,
+            highest_score: basicAnalytics.highest_score,
+            lowest_score: 0,
+            passed_exams: basicAnalytics.passed_count,
+            failed_exams: basicAnalytics.failed_count,
+            pending_evaluations: 0,
+            average_integrity_score: basicAnalytics.integrity_score || 100,
+            pass_rate: basicAnalytics.pass_rate,
+          },
+          recent_history: basicAnalytics.recent_attempts.map((att, idx) => ({
+            attempt_id: att.attempt_id,
+            exam_id: att.exam_id,
+            exam_title: att.exam_title,
+            course_code: att.course_code,
+            attempt_number: idx + 1,
+            status: att.status,
+            grading_status: "COMPLETED",
+            marks_obtained: att.score,
+            score: att.score,
+            total_marks: att.total_marks,
+            percentage: att.percentage,
+            passed: att.passed,
+            started_at: att.started_at,
+            submitted_at: att.submitted_at,
+            violations_count: att.violations_count,
+            integrity_score: att.integrity_score || 100,
+            can_resume: false,
+          })),
+          analytics: {
+            score_trend: basicAnalytics.recent_attempts.map((att) => ({
+              attempt_id: att.attempt_id,
+              exam_title: att.exam_title,
+              course_code: att.course_code,
+              percentage: att.percentage,
+              date: att.started_at,
+              passed: att.passed,
+            })),
+            subject_performance: basicAnalytics.subject_performance.map((s) => ({
+              course_code: s.course_code,
+              subject_name: s.course_code,
+              attempts_count: s.attempts_count,
+              average_score: s.average_score,
+              pass_rate: 100,
+            })),
+            pass_rate: basicAnalytics.pass_rate,
+            has_sufficient_data: basicAnalytics.subject_performance.length >= 2,
+          },
+          recent_activities: [],
+        });
       }
-    } catch (e) {
-      console.error("Error loading dashboard data:", e);
+    } catch (e: any) {
+      console.error("Error loading student dashboard:", e);
+      setError("Failed to load dashboard records. Please refresh.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Sample analytics data to showcase to judges if the database is fresh with 0 attempts
-  const sampleJudgeAnalytics: StudentAnalytics = {
-    total_tests_taken: 4,
-    average_score: 82.5,
-    highest_score: 94.0,
-    pass_rate: 100,
-    passed_count: 4,
-    failed_count: 0,
-    integrity_score: 99.2,
-    recent_attempts: [
-      {
-        attempt_id: "demo-att-1",
-        exam_id: "exam-1",
-        exam_title: "CS101: Systems Programming & Data Structures",
-        course_code: "CS101",
-        status: "submitted",
-        score: 94,
-        total_marks: 100,
-        percentage: 94.0,
-        passed: true,
-        started_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-        submitted_at: new Date(Date.now() - 86400000 * 2 + 2700000).toISOString(),
-        violations_count: 0,
-      },
-      {
-        attempt_id: "demo-att-2",
-        exam_id: "exam-2",
-        exam_title: "CS202: Database Management Systems",
-        course_code: "CS202",
-        status: "submitted",
-        score: 86,
-        total_marks: 100,
-        percentage: 86.0,
-        passed: true,
-        started_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-        submitted_at: new Date(Date.now() - 86400000 * 5 + 3200000).toISOString(),
-        violations_count: 0,
-      },
-      {
-        attempt_id: "demo-att-3",
-        exam_id: "exam-3",
-        exam_title: "CS305: Artificial Intelligence & Neural Networks",
-        course_code: "CS305",
-        status: "submitted",
-        score: 78,
-        total_marks: 100,
-        percentage: 78.0,
-        passed: true,
-        started_at: new Date(Date.now() - 86400000 * 9).toISOString(),
-        submitted_at: new Date(Date.now() - 86400000 * 9 + 3100000).toISOString(),
-        violations_count: 1,
-      },
-    ],
-    subject_performance: [
-      { course_code: "CS101", attempts_count: 1, average_score: 94.0 },
-      { course_code: "CS202", attempts_count: 1, average_score: 86.0 },
-      { course_code: "CS305", attempts_count: 1, average_score: 78.0 },
-    ],
+  const summary = dashboardData?.summary || {
+    total_exams_attempted: 0,
+    exams_completed: 0,
+    exams_in_progress: 0,
+    average_score: 0,
+    highest_score: 0,
+    lowest_score: 0,
+    passed_exams: 0,
+    failed_exams: 0,
+    pending_evaluations: 0,
+    average_integrity_score: 100,
+    pass_rate: 0,
   };
 
-  const isZeroState = !analytics || analytics.total_tests_taken === 0;
-  const displayAnalytics = isZeroState && showDemoMock ? sampleJudgeAnalytics : analytics;
+  const recentAttempts = dashboardData?.recent_history || [];
+  const analytics = dashboardData?.analytics;
+  const recentActivity = dashboardData?.recent_activities || [];
+
+  // Check if student has an active / resumable attempt
+  const activeAttempt = recentAttempts.find((att) => att.status === "IN_PROGRESS");
+
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case "LOGIN":
+        return <LogIn className="w-3.5 h-3.5 text-blue-600" />;
+      case "EXAM_VIEWED":
+        return <Eye className="w-3.5 h-3.5 text-slate-600" />;
+      case "ATTEMPT_STARTED":
+        return <PlayCircle className="w-3.5 h-3.5 text-indigo-600" />;
+      case "ATTEMPT_RESUMED":
+        return <RotateCcw className="w-3.5 h-3.5 text-amber-600" />;
+      case "ANSWER_SAVED":
+        return <Save className="w-3.5 h-3.5 text-emerald-600" />;
+      case "EXAM_SUBMITTED":
+      case "EXAM_GRADED":
+        return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />;
+      case "VIOLATION_RECORDED":
+      case "AUTO_TERMINATED":
+        return <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />;
+      default:
+        return <Activity className="w-3.5 h-3.5 text-slate-500" />;
+    }
+  };
+
+  const formatActivityTime = (isoString: string) => {
+    try {
+      const d = new Date(isoString);
+      return d.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return isoString;
+    }
+  };
 
   return (
     <StudentPortalLayout>
       <div className="space-y-8">
+        {/* Error notification banner */}
+        {error && (
+          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between shadow-xs">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={loadDashboardData}
+              className="text-xs font-bold text-rose-700 underline hover:text-rose-900 cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Active Attempt Resumption Banner */}
+        {activeAttempt && (
+          <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 rounded-2xl p-5 text-white shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-amber-400/40 animate-pulse">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0">
+                <RotateCcw className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <span className="text-[11px] font-extrabold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded text-amber-100">
+                  Unfinished Examination Session
+                </span>
+                <h3 className="text-base font-bold mt-1">
+                  You have an in-progress session for: {activeAttempt.exam_title}
+                </h3>
+                <p className="text-xs text-amber-100 mt-0.5">
+                  Started at {formatActivityTime(activeAttempt.started_at)} • Attempt #{activeAttempt.attempt_number}
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => navigate(`/exams/${activeAttempt.attempt_id}/take`)}
+              className="bg-white text-amber-900 hover:bg-amber-50 font-bold text-xs px-5 py-2.5 shrink-0 shadow-md flex items-center gap-2"
+            >
+              <span>Resume Examination</span>
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+
         {/* Hero Welcome Banner */}
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-2xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
           <div className="absolute right-0 top-0 bottom-0 opacity-10 flex items-center pointer-events-none pr-8">
@@ -133,13 +241,13 @@ export const StudentDashboardPage: React.FC = () => {
           <div className="relative z-10 max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 backdrop-blur-md border border-indigo-400/30 text-xs font-semibold text-indigo-200 uppercase tracking-wider mb-3">
               <Zap className="w-3.5 h-3.5 text-amber-400" />
-              AI Invigilation Engine V2.4 Active
+              AI Invigilation Engine Active
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
               Welcome back, {user?.full_name || "Candidate"}!
             </h1>
             <p className="mt-2 text-indigo-100/90 text-xs sm:text-sm leading-relaxed max-w-2xl">
-              Welcome to your institutional examination dashboard. Review your verified attempt records, proctoring compliance ratings, and launch your scheduled assessment tests below.
+              Access your institutional examination dashboard. View real database-verified scorecards, monitor your continuous activity timeline, and take your scheduled assessments below.
             </p>
 
             <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -152,7 +260,7 @@ export const StudentDashboardPage: React.FC = () => {
               </a>
               <span className="inline-flex items-center gap-1.5 text-xs text-indigo-200 bg-white/10 px-3 py-2 rounded-lg border border-white/10 backdrop-blur-xs">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                Dual-Face & Vision AI Ready
+                OpenCV Dual-Face & Phone Detection Active
               </span>
             </div>
           </div>
@@ -167,28 +275,17 @@ export const StudentDashboardPage: React.FC = () => {
                 Performance & Proctoring Overview
               </h2>
               <p className="text-xs text-slate-500">
-                Aggregated testing records and automated invigilation integrity index
+                Authoritative examination metrics calculated from your verified database records
               </p>
             </div>
-
-            {isZeroState && (
-              <button
-                type="button"
-                onClick={() => setShowDemoMock(!showDemoMock)}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                {showDemoMock ? "Show Live Zero State" : "Demo Mode: Preview Historical Analytics"}
-              </button>
-            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Card 1: Tests Completed */}
+            {/* Card 1: Tests Attempted */}
             <Card className="p-5 border-slate-200 bg-white hover:shadow-md transition-all">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Tests Completed
+                  Tests Attempted
                 </span>
                 <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
                   <FileText className="w-4 h-4" />
@@ -196,18 +293,18 @@ export const StudentDashboardPage: React.FC = () => {
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-extrabold text-slate-900">
-                  {displayAnalytics?.total_tests_taken ?? 0}
+                  {summary.total_exams_attempted}
                 </span>
-                <span className="text-xs text-slate-500 font-medium">Exams</span>
+                <span className="text-xs text-slate-500 font-medium">Total</span>
               </div>
               <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
                 <span className="text-emerald-700 font-medium flex items-center gap-1">
                   <CheckCircle className="w-3.5 h-3.5" />
-                  {displayAnalytics?.passed_count ?? 0} Passed
+                  {summary.exams_completed} Completed
                 </span>
-                <span className="text-rose-600 font-medium flex items-center gap-1">
-                  <XCircle className="w-3.5 h-3.5" />
-                  {displayAnalytics?.failed_count ?? 0} Failed
+                <span className="text-amber-600 font-medium flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  {summary.exams_in_progress} In Progress
                 </span>
               </div>
             </Card>
@@ -224,18 +321,20 @@ export const StudentDashboardPage: React.FC = () => {
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-extrabold text-slate-900">
-                  {(displayAnalytics?.average_score ?? 0).toFixed(1)}%
+                  {summary.average_score.toFixed(1)}%
                 </span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {displayAnalytics?.average_score && displayAnalytics.average_score >= 75
+                  {summary.average_score >= 75
                     ? "Distinction"
-                    : "Standard"}
+                    : summary.average_score >= 50
+                    ? "Passing"
+                    : "Needs Review"}
                 </span>
               </div>
               <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between">
-                <span>Peak Performance:</span>
+                <span>Highest Score:</span>
                 <span className="font-bold text-slate-800">
-                  {(displayAnalytics?.highest_score ?? 0).toFixed(1)}%
+                  {summary.highest_score.toFixed(1)}%
                 </span>
               </div>
             </Card>
@@ -252,17 +351,17 @@ export const StudentDashboardPage: React.FC = () => {
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-extrabold text-slate-900">
-                  {(displayAnalytics?.pass_rate ?? 0).toFixed(0)}%
+                  {(summary.pass_rate ?? 0).toFixed(0)}%
                 </span>
                 <span className="text-xs text-slate-500 font-medium">Clearance</span>
               </div>
-              <div className="mt-3 pt-3 border-t border-slate-100">
-                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div
-                    className="bg-blue-600 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(100, displayAnalytics?.pass_rate ?? 0)}%` }}
-                  />
-                </div>
+              <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
+                <span className="text-emerald-700 font-medium">
+                  {summary.passed_exams} Passed
+                </span>
+                <span className="text-rose-600 font-medium">
+                  {summary.failed_exams} Failed
+                </span>
               </div>
             </Card>
 
@@ -270,7 +369,7 @@ export const StudentDashboardPage: React.FC = () => {
             <Card className="p-5 border-slate-200 bg-white hover:shadow-md transition-all">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Integrity Score
+                  Proctoring Trust
                 </span>
                 <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
                   <ShieldCheck className="w-4 h-4" />
@@ -278,15 +377,19 @@ export const StudentDashboardPage: React.FC = () => {
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-extrabold text-slate-900">
-                  {(displayAnalytics?.integrity_score ?? 100).toFixed(1)}%
+                  {(summary.average_integrity_score ?? 100).toFixed(1)}%
                 </span>
                 <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" /> High Trust
                 </span>
               </div>
               <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between">
-                <span>Invigilation:</span>
-                <span className="font-semibold text-emerald-700">Clean Session</span>
+                <span>Evaluation Status:</span>
+                <span className="font-semibold text-emerald-700">
+                  {summary.pending_evaluations > 0
+                    ? `${summary.pending_evaluations} Pending`
+                    : "All Evaluated"}
+                </span>
               </div>
             </Card>
           </div>
@@ -301,7 +404,7 @@ export const StudentDashboardPage: React.FC = () => {
                 Assigned Assessments (Give Test)
               </h2>
               <p className="text-xs text-slate-500">
-                Select an active assessment to begin hardware pre-checks and launch your test
+                Select an active assessment to begin hardware pre-checks and launch your examination
               </p>
             </div>
             <Link
@@ -323,82 +426,104 @@ export const StudentDashboardPage: React.FC = () => {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {exams.slice(0, 2).map((exam) => (
-                <Card
-                  key={exam.id}
-                  className="p-6 border-slate-200 hover:border-indigo-400 hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group bg-white"
-                >
-                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 to-indigo-700" />
+              {exams.slice(0, 2).map((exam) => {
+                const examActiveAttempt = recentAttempts.find(
+                  (a) => a.exam_id === exam.id && a.can_resume
+                );
 
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                        {exam.course_code}
-                      </span>
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                        <CheckCircle2 className="w-3 h-3" /> Live & Ready
-                      </span>
+                return (
+                  <Card
+                    key={exam.id}
+                    className="p-6 border-slate-200 hover:border-indigo-400 hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group bg-white"
+                  >
+                    <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 to-indigo-700" />
+
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {exam.course_code}
+                        </span>
+                        {examActiveAttempt ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 animate-pulse">
+                            <RotateCcw className="w-3 h-3" /> In Progress
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3" /> Live & Ready
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="text-base font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                        {exam.title}
+                      </h3>
+                      <p className="text-xs text-slate-600 mt-1 line-clamp-2 leading-relaxed">
+                        {exam.description ||
+                          "Comprehensive academic assessment proctored via biometric verification and browser lockdown."}
+                      </p>
+
+                      {/* Metadata Pills */}
+                      <div className="grid grid-cols-3 gap-2 mt-4 text-center">
+                        <div className="bg-slate-50 border border-slate-200/70 p-2 rounded-lg">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Duration</span>
+                          <span className="text-xs font-bold text-slate-800 flex items-center justify-center gap-1 mt-0.5">
+                            <Clock className="w-3 h-3 text-indigo-600" />
+                            {exam.duration_minutes}m
+                          </span>
+                        </div>
+                        <div className="bg-slate-50 border border-slate-200/70 p-2 rounded-lg">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Questions</span>
+                          <span className="text-xs font-bold text-slate-800 flex items-center justify-center gap-1 mt-0.5">
+                            <FileText className="w-3 h-3 text-blue-600" />
+                            {exam.question_count} MCQs
+                          </span>
+                        </div>
+                        <div className="bg-slate-50 border border-slate-200/70 p-2 rounded-lg">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Passing</span>
+                          <span className="text-xs font-bold text-slate-800 flex items-center justify-center gap-1 mt-0.5">
+                            <Award className="w-3 h-3 text-amber-600" />
+                            {exam.passing_marks}/{exam.total_marks}
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
-                    <h3 className="text-base font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                      {exam.title}
-                    </h3>
-                    <p className="text-xs text-slate-600 mt-1 line-clamp-2 leading-relaxed">
-                      {exam.description ||
-                        "Comprehensive academic assessment proctored via biometric verification and browser lockdown."}
-                    </p>
-
-                    {/* Metadata Pills */}
-                    <div className="grid grid-cols-3 gap-2 mt-4 text-center">
-                      <div className="bg-slate-50 border border-slate-200/70 p-2 rounded-lg">
-                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Duration</span>
-                        <span className="text-xs font-bold text-slate-800 flex items-center justify-center gap-1 mt-0.5">
-                          <Clock className="w-3 h-3 text-indigo-600" />
-                          {exam.duration_minutes}m
-                        </span>
-                      </div>
-                      <div className="bg-slate-50 border border-slate-200/70 p-2 rounded-lg">
-                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Questions</span>
-                        <span className="text-xs font-bold text-slate-800 flex items-center justify-center gap-1 mt-0.5">
-                          <FileText className="w-3 h-3 text-blue-600" />
-                          {exam.question_count} MCQs
-                        </span>
-                      </div>
-                      <div className="bg-slate-50 border border-slate-200/70 p-2 rounded-lg">
-                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Passing</span>
-                        <span className="text-xs font-bold text-slate-800 flex items-center justify-center gap-1 mt-0.5">
-                          <Award className="w-3 h-3 text-amber-600" />
-                          {exam.passing_marks}/{exam.total_marks}
-                        </span>
-                      </div>
+                    <div className="mt-5 pt-2">
+                      {examActiveAttempt ? (
+                        <Button
+                          onClick={() => navigate(`/exams/${examActiveAttempt.attempt_id}/take`)}
+                          className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 text-xs flex items-center justify-center gap-2 shadow-xs group-hover:scale-[1.01] transition-transform cursor-pointer"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          <span>Resume Ongoing Attempt</span>
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => navigate(`/exams/${exam.id}/instructions`)}
+                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 text-xs flex items-center justify-center gap-2 shadow-xs group-hover:scale-[1.01] transition-transform cursor-pointer"
+                        >
+                          <span>Start Examination</span>
+                          <ArrowRight className="w-4 h-4 ml-1" />
+                        </Button>
+                      )}
                     </div>
-                  </div>
-
-                  <div className="mt-5 pt-2">
-                    <Button
-                      onClick={() => navigate(`/exams/${exam.id}/instructions`)}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 text-xs flex items-center justify-center gap-2 shadow-xs group-hover:scale-[1.01] transition-transform cursor-pointer"
-                    >
-                      <span>Start Examination</span>
-                      <ArrowRight className="w-4 h-4 ml-1" />
-                    </Button>
-                  </div>
-                </Card>
-              ))}
+                  </Card>
+                );
+              })}
             </div>
           )}
         </section>
 
-        {/* Recent Attempts Table */}
+        {/* Recent Submissions Table */}
         <section>
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-indigo-600" />
-                Recent Verified Submissions
+                Recent Verified Submissions & History
               </h2>
               <p className="text-xs text-slate-500">
-                Official audit log of your most recent assessment attempts
+                Official audit log of your most recent assessment attempts stored in the database
               </p>
             </div>
             <Link
@@ -409,10 +534,13 @@ export const StudentDashboardPage: React.FC = () => {
             </Link>
           </div>
 
-          {(!displayAnalytics || displayAnalytics.recent_attempts.length === 0) ? (
+          {recentAttempts.length === 0 ? (
             <Card className="p-8 text-center border-slate-200 bg-white">
               <Calendar className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-xs text-slate-500">No attempts registered yet.</p>
+              <h3 className="text-sm font-bold text-slate-700">No Attempts Recorded Yet</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                Once you start or complete examinations, your full scorecards, timestamps, and proctoring integrity records will appear here.
+              </p>
             </Card>
           ) : (
             <Card className="overflow-hidden border border-slate-200 bg-white shadow-xs">
@@ -421,6 +549,7 @@ export const StudentDashboardPage: React.FC = () => {
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold">
                       <th className="py-3 px-4">Exam / Course</th>
+                      <th className="py-3 px-4 text-center">Attempt #</th>
                       <th className="py-3 px-4">Date</th>
                       <th className="py-3 px-4 text-center">Score</th>
                       <th className="py-3 px-4 text-center">Result</th>
@@ -429,7 +558,7 @@ export const StudentDashboardPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {displayAnalytics.recent_attempts.slice(0, 5).map((att) => (
+                    {recentAttempts.slice(0, 5).map((att) => (
                       <tr key={att.attempt_id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3 px-4 font-semibold text-slate-900">
                           <div className="flex items-center gap-2">
@@ -439,22 +568,35 @@ export const StudentDashboardPage: React.FC = () => {
                             <span className="truncate max-w-[200px]">{att.exam_title}</span>
                           </div>
                         </td>
+                        <td className="py-3 px-4 text-center font-bold text-slate-600">
+                          #{att.attempt_number}
+                        </td>
                         <td className="py-3 px-4 text-slate-500 text-[11px]">
-                          {new Date(att.started_at).toLocaleDateString()}
+                          {formatActivityTime(att.started_at)}
                         </td>
                         <td className="py-3 px-4 text-center font-bold text-slate-800">
-                          {att.score} / {att.total_marks}
+                          {att.status === "IN_PROGRESS" ? (
+                            <span className="text-amber-600 italic">In Progress</span>
+                          ) : (
+                            `${att.marks_obtained ?? (att as any).score} / ${att.total_marks}`
+                          )}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                              att.passed
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                : "bg-rose-50 text-rose-700 border border-rose-200"
-                            }`}
-                          >
-                            {att.passed ? "PASSED" : "FAILED"} ({att.percentage.toFixed(0)}%)
-                          </span>
+                          {att.status === "IN_PROGRESS" ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-bold text-[10px] bg-amber-50 text-amber-700 border border-amber-200">
+                              <Clock className="w-3 h-3" /> ACTIVE
+                            </span>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                att.passed
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : "bg-rose-50 text-rose-700 border border-rose-200"
+                              }`}
+                            >
+                              {att.passed ? "PASSED" : "FAILED"} ({att.percentage.toFixed(0)}%)
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -463,13 +605,23 @@ export const StudentDashboardPage: React.FC = () => {
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right">
-                          <Link
-                            to={`/exams/${att.attempt_id}/result`}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-[11px] border border-indigo-200"
-                          >
-                            <span>Scorecard</span>
-                            <ChevronRight className="w-3 h-3" />
-                          </Link>
+                          {att.status === "IN_PROGRESS" ? (
+                            <Button
+                              size="sm"
+                              onClick={() => navigate(`/exams/${att.attempt_id}/take`)}
+                              className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] py-1 px-2.5 h-auto"
+                            >
+                              <RotateCcw className="w-3 h-3 mr-1" /> Resume
+                            </Button>
+                          ) : (
+                            <Link
+                              to={`/exams/${att.attempt_id}/result`}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-[11px] border border-indigo-200"
+                            >
+                              <span>Scorecard</span>
+                              <ChevronRight className="w-3 h-3" />
+                            </Link>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -479,6 +631,196 @@ export const StudentDashboardPage: React.FC = () => {
             </Card>
           )}
         </section>
+
+        {/* 2-Column Section: Performance Analytics & Activity Timeline */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column: Performance Analytics & Subject Mastery (7 cols) */}
+          <div className="lg:col-span-7 space-y-6">
+            <Card className="p-6 border-slate-200 bg-white space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-indigo-600" />
+                  <h3 className="text-base font-bold text-slate-900">
+                    Performance Trajectory & Subject Mastery
+                  </h3>
+                </div>
+                <Link
+                  to="/student/performance"
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700"
+                >
+                  Full Report &rarr;
+                </Link>
+              </div>
+
+              {/* Subject Performance Breakdown */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Subject Proficiency Breakdown
+                </h4>
+
+                {(!analytics?.subject_performance || analytics.subject_performance.length === 0) ? (
+                  <div className="p-4 rounded-lg bg-slate-50 border border-slate-100 text-center">
+                    <p className="text-xs text-slate-500">
+                      No graded subject data yet. Complete tests to view subject mastery.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {analytics.subject_performance.map((sub) => (
+                      <div key={sub.course_code} className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-slate-800 flex items-center gap-1.5">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              {sub.course_code}
+                            </span>
+                            {sub.subject_name}
+                          </span>
+                          <span className="font-bold text-slate-900">
+                            {sub.average_score.toFixed(1)}% ({sub.attempts_count} {sub.attempts_count === 1 ? "test" : "tests"})
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              sub.average_score >= 75
+                                ? "bg-emerald-500"
+                                : sub.average_score >= 50
+                                ? "bg-indigo-500"
+                                : "bg-amber-500"
+                            }`}
+                            style={{ width: `${Math.min(100, Math.max(0, sub.average_score))}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Strongest / Weakest Subject Callout */}
+                {analytics?.strongest_subject ? (
+                  <div className="pt-2 grid grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
+                      <span className="text-[10px] font-bold text-emerald-800 uppercase block">
+                        Strongest Subject
+                      </span>
+                      <span className="font-extrabold text-emerald-950 mt-0.5 block">
+                        {analytics.strongest_subject}
+                      </span>
+                    </div>
+                    {analytics?.weakest_subject && (
+                      <div className="p-3 rounded-lg bg-amber-50 border border-amber-100">
+                        <span className="text-[10px] font-bold text-amber-800 uppercase block">
+                          Area for Review
+                        </span>
+                        <span className="font-extrabold text-amber-950 mt-0.5 block">
+                          {analytics.weakest_subject}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-100 text-[11px] text-slate-500">
+                    ℹ️ Complete assessments in at least 2 distinct subjects to activate comparative mastery highlights.
+                  </div>
+                )}
+              </div>
+
+              {/* Score Trend History */}
+              {analytics?.score_trend && analytics.score_trend.length > 0 && (
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Chronological Score Progression
+                  </h4>
+                  <div className="flex items-center gap-2 overflow-x-auto pb-2 pt-1">
+                    {analytics.score_trend.map((pt, idx) => (
+                      <div
+                        key={pt.attempt_id}
+                        className="p-2.5 rounded-lg border border-slate-200 bg-slate-50 min-w-[120px] text-center shrink-0"
+                      >
+                        <span className="text-[10px] font-extrabold text-slate-400 block">
+                          Test #{idx + 1}
+                        </span>
+                        <span
+                          className={`text-sm font-extrabold block my-0.5 ${
+                            pt.passed ? "text-emerald-700" : "text-rose-700"
+                          }`}
+                        >
+                          {pt.percentage.toFixed(0)}%
+                        </span>
+                        <span className="text-[10px] text-slate-500 block truncate max-w-[100px] mx-auto">
+                          {pt.course_code}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* Right Column: Student Activity Audit Trail Timeline (5 cols) */}
+          <div className="lg:col-span-5 space-y-6">
+            <Card className="p-6 border-slate-200 bg-white space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-indigo-600" />
+                  <h3 className="text-base font-bold text-slate-900">
+                    Student Activity Timeline
+                  </h3>
+                </div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Audit Log
+                </span>
+              </div>
+
+              {recentActivity.length === 0 ? (
+                <div className="p-8 text-center border border-dashed border-slate-200 rounded-lg">
+                  <Activity className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs text-slate-500">
+                    No recent activity logged. Actions such as logging in, starting exams, saving answers, and submissions are automatically logged here.
+                  </p>
+                </div>
+              ) : (
+                <div className="flow-root">
+                  <ul className="-mb-8">
+                    {recentActivity.slice(0, 8).map((act, actIdx) => (
+                      <li key={act.id}>
+                        <div className="relative pb-6">
+                          {actIdx !== Math.min(recentActivity.length, 8) - 1 ? (
+                            <span
+                              className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-slate-200"
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          <div className="relative flex items-start space-x-3">
+                            <div className="relative">
+                              <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center">
+                                {getActivityIcon(act.activity_type)}
+                              </div>
+                            </div>
+                            <div className="min-w-0 flex-1 pt-0.5">
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs font-bold text-slate-900">
+                                  {act.title}
+                                </p>
+                                <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                                  {formatActivityTime(act.timestamp)}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">
+                                {act.description}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </Card>
+          </div>
+        </div>
       </div>
     </StudentPortalLayout>
   );

@@ -11,6 +11,14 @@ import { StudentResultsPage } from "../pages/student/StudentResultsPage";
 import { StudentPerformancePage } from "../pages/student/StudentPerformancePage";
 import { StudentProfilePage } from "../pages/student/StudentProfilePage";
 
+import { TeacherOverviewPage } from "../pages/teacher/TeacherOverviewPage";
+import { TeacherMyExamsPage } from "../pages/teacher/TeacherMyExamsPage";
+import { TeacherCreateExamPage } from "../pages/teacher/TeacherCreateExamPage";
+import { TeacherResultsPage } from "../pages/teacher/TeacherResultsPage";
+import { TeacherLiveMonitoringPage } from "../pages/teacher/TeacherLiveMonitoringPage";
+import { TeacherViolationsPage } from "../pages/teacher/TeacherViolationsPage";
+import { TeacherProfilePage } from "../pages/teacher/TeacherProfilePage";
+
 import { AdminDashboardPage } from "../pages/admin/AdminDashboardPage";
 import { AdminUsersPage } from "../pages/admin/AdminUsersPage";
 
@@ -23,7 +31,10 @@ import { useAuthStore } from "../store/useAuthStore";
 const RootRedirect: React.FC = () => {
   const { user, isAuthenticated } = useAuthStore();
   if (isAuthenticated && user) {
-    if (user.role === "admin" || user.role === "super_admin" || user.role === "teacher") {
+    if (user.role === "teacher") {
+      return <Navigate to="/teacher/dashboard" replace />;
+    }
+    if (user.role === "admin" || user.role === "super_admin") {
       return <Navigate to="/admin/dashboard" replace />;
     }
     return <Navigate to="/student/dashboard" replace />;
@@ -68,11 +79,19 @@ export const AppRoutes: React.FC = () => {
         <Route path="/exams/:attemptId/result" element={<ExamResultPage />} />
       </Route>
 
-      {/* 5. Teacher & Invigilator / Admin Protected Routes */}
+      {/* 5. Teacher & Faculty Portal Protected Routes */}
       <Route element={<ProtectedRoute allowedRoles={["teacher", "admin", "super_admin"]} />}>
+        <Route path="/teacher/dashboard" element={<TeacherOverviewPage />} />
+        <Route path="/teacher/exams" element={<TeacherMyExamsPage />} />
+        <Route path="/teacher/create-exam" element={<TeacherCreateExamPage />} />
+        <Route path="/teacher/results" element={<TeacherResultsPage />} />
+        <Route path="/teacher/monitoring" element={<TeacherLiveMonitoringPage />} />
+        <Route path="/teacher/violations" element={<TeacherViolationsPage />} />
+        <Route path="/teacher/profile" element={<TeacherProfilePage />} />
+
+        {/* Admin Invigilator operations */}
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         <Route path="/admin/users" element={<AdminUsersPage />} />
-        <Route path="/teacher/dashboard" element={<AdminDashboardPage />} />
       </Route>
 
       {/* 6. Fallback */}

@@ -266,7 +266,7 @@ async def resend_otp(db: AsyncSession, email: str) -> SendOtpResponse:
         debug_otp=otp_code if settings.DEV_MODE else None
     )
 
-async def authenticate_user(db: AsyncSession, req: LoginRequest) -> TokenResponse:
+async def authenticate_user(db: AsyncSession, req: LoginRequest, required_role: Optional[List[str]] = None) -> TokenResponse:
     clean_email = req.email.strip().lower()
     clean_pwd = req.password.strip()
 
@@ -369,6 +369,12 @@ async def authenticate_user(db: AsyncSession, req: LoginRequest) -> TokenRespons
             detail="Your account has been deactivated. Please contact administration."
         )
 
+    if required_role and user.role not in required_role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied: Account role '{user.role}' is not authorized for this portal."
+        )
+
     # Security Audit Log for Login
     audit = SecurityAuditLog(
         user_id=user.id,
@@ -376,6 +382,18 @@ async def authenticate_user(db: AsyncSession, req: LoginRequest) -> TokenRespons
         details_json=json.dumps({"email": user.email, "role": user.role}),
     )
     db.add(audit)
+
+    from app.services.activity_service import ActivityService
+    await ActivityService.record_activity(
+        db=db,
+        user_id=user.id,
+        activity_type="LOGIN",
+        title="Logged in successfully",
+        description=f"Authenticated into portal via password ({user.role})",
+        status="SUCCESS",
+        commit=False
+    )
+
     await db.commit()
 
     access_token = create_access_token(
@@ -388,7 +406,7 @@ async def authenticate_user(db: AsyncSession, req: LoginRequest) -> TokenRespons
         user=UserResponse.model_validate(user)
     )
 
-async def request_login_otp(db: AsyncSession, email: str) -> SendOtpResponse:
+async def request_login_otp(db: AsyncSession, email: str, role_filter: Optional[List[str]] = None) -> SendOtpResponse:
     clean_email = email.strip().lower()
     
     # Check if there is already a pending registration
@@ -400,6 +418,20 @@ async def request_login_otp(db: AsyncSession, email: str) -> SendOtpResponse:
         ).order_by(EmailVerification.created_at.desc())
     )
     if pending_res.scalars().first():
+        if role_filter:
+            # Check role in pending payload
+            verif = pending_res.scalars().first()
+            try:
+                p = json.loads(verif.registration_payload)
+                if p.get("role") not in role_filter:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Access denied: This email is not registered as an authorized teacher or faculty account."
+                    )
+            except HTTPException:
+                raise
+            except Exception:
+                pass
         return await resend_otp(db, clean_email)
     
     user_res = await db.execute(select(User).where(User.email == clean_email))
@@ -407,7 +439,19 @@ async def request_login_otp(db: AsyncSession, email: str) -> SendOtpResponse:
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No account registered with this email address. Please register first."
+            detail="No account registered with this email address. Please contact your administrator." if role_filter else "No account registered with this email address. Please register first."
+        )
+    
+    if role_filter and user.role not in role_filter:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: This email is not registered as an authorized teacher or faculty account."
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been deactivated. Please contact administration."
         )
     
     otp_code = generate_otp_code(6)
@@ -438,7 +482,7 @@ async def request_login_otp(db: AsyncSession, email: str) -> SendOtpResponse:
         debug_otp=otp_code if settings.DEV_MODE else None
     )
 
-async def authenticate_with_otp(db: AsyncSession, email: str, otp_code: str) -> TokenResponse:
+async def authenticate_with_otp(db: AsyncSession, email: str, otp_code: str, required_role: Optional[List[str]] = None) -> TokenResponse:
     clean_email = email.strip().lower()
     clean_otp = otp_code.strip()
     
@@ -452,6 +496,18 @@ async def authenticate_with_otp(db: AsyncSession, email: str, otp_code: str) -> 
     )
     reg_verif = pending_reg.scalars().first()
     if reg_verif:
+        if required_role:
+            try:
+                p = json.loads(reg_verif.registration_payload)
+                if p.get("role") not in required_role:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Access denied: This registration is not authorized for faculty/teacher access."
+                    )
+            except HTTPException:
+                raise
+            except Exception:
+                pass
         return await verify_otp_and_register(db, VerifyOtpRequest(email=clean_email, otp_code=clean_otp))
     
     # 2. Check if this is a login or password reset OTP for an existing user
@@ -507,6 +563,12 @@ async def authenticate_with_otp(db: AsyncSession, email: str, otp_code: str) -> 
     user = user_res.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User account not found.")
+
+    if required_role and user.role not in required_role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied: Account role '{user.role}' is not authorized for this portal."
+        )
         
     user.is_verified = True
     user.is_active = True
@@ -517,6 +579,18 @@ async def authenticate_with_otp(db: AsyncSession, email: str, otp_code: str) -> 
         details_json=json.dumps({"email": user.email, "role": user.role}),
     )
     db.add(audit)
+
+    from app.services.activity_service import ActivityService
+    await ActivityService.record_activity(
+        db=db,
+        user_id=user.id,
+        activity_type="LOGIN",
+        title="Logged in successfully",
+        description=f"Authenticated into portal via email OTP ({user.role})",
+        status="SUCCESS",
+        commit=False
+    )
+
     await db.commit()
     
     access_token = create_access_token(
@@ -802,6 +876,29 @@ async def seed_demo_accounts_if_empty(db: AsyncSession) -> None:
         )
         db.add(admin_profile)
         print("[SEEDED] Demo admin account created: admin@example.com / admin123")
+
+    # 3. Teacher account: teacher@example.com / admin123
+    teacher_res = await db.execute(select(User).where(User.email == "teacher@example.com"))
+    if not teacher_res.scalars().first():
+        demo_teacher = User(
+            id="demo-teacher-01",
+            email="teacher@example.com",
+            password_hash=get_password_hash("admin123"),
+            full_name="Prof. David Mitchell",
+            role="teacher",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(demo_teacher)
+        await db.flush()
+
+        teacher_profile = Administrator(
+            id=demo_teacher.id,
+            employee_code="FAC-102",
+            admin_level="Professor & Invigilator",
+        )
+        db.add(teacher_profile)
+        print("[SEEDED] Demo teacher account created: teacher@example.com / admin123")
 
     await db.commit()
 

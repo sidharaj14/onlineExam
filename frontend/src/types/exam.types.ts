@@ -128,3 +128,108 @@ export interface ExamResult {
   integrity_score?: number;
   violations?: ViolationItem[];
 }
+
+export interface StudentDashboardSummary {
+  total_exams_attempted: number;
+  exams_completed: number;
+  exams_in_progress: number;
+  average_score: number;
+  highest_score: number;
+  lowest_score: number;
+  passed_exams: number;
+  failed_exams: number;
+  pending_evaluations: number;
+  average_integrity_score: number;
+  pass_rate: number;
+}
+
+export interface StudentAttemptHistoryItem {
+  attempt_id: string;
+  exam_id: string;
+  exam_title: string;
+  course_code: string;
+  attempt_number: number;
+  started_at: string;
+  submitted_at?: string;
+  marks_obtained: number;
+  score?: number;
+  total_marks: number;
+  percentage: number;
+  passed?: boolean | null;
+  status: string;
+  grading_status: string;
+  violations_count: number;
+  integrity_score: number;
+  time_spent_seconds?: number | null;
+  termination_reason?: string | null;
+  can_resume?: boolean;
+}
+
+export interface ScoreTrendPoint {
+  attempt_id: string;
+  exam_title: string;
+  course_code: string;
+  date: string;
+  percentage: number;
+  passed: boolean;
+}
+
+export interface SubjectPerformanceDetail {
+  course_code: string;
+  subject_name: string;
+  attempts_count: number;
+  average_score: number;
+  pass_rate: number;
+}
+
+export interface StudentAnalyticsTrend {
+  score_trend: ScoreTrendPoint[];
+  subject_performance: SubjectPerformanceDetail[];
+  strongest_subject?: string | null;
+  weakest_subject?: string | null;
+  pass_rate: number;
+  has_sufficient_data: boolean;
+  data_note?: string | null;
+}
+
+export interface StudentActivityItem {
+  id: string;
+  activity_type: string;
+  title: string;
+  description?: string | null;
+  exam_id?: string | null;
+  exam_title?: string | null;
+  course_code?: string | null;
+  attempt_id?: string | null;
+  status: string;
+  timestamp: string;
+  details?: Record<string, any>;
+}
+
+export interface StudentFullDashboardResponse {
+  student_id: string;
+  student_name: string;
+  student_email: string;
+  summary: StudentDashboardSummary;
+  recent_history: StudentAttemptHistoryItem[];
+  analytics: StudentAnalyticsTrend;
+  recent_activities: StudentActivityItem[];
+}
+
+export interface TeacherStudentPerformanceResponse {
+  student_id: string;
+  full_name: string;
+  email: string;
+  student_id_number?: string | null;
+  department?: string | null;
+  course?: string | null;
+  semester?: number | null;
+  total_attempts: number;
+  completed_attempts: number;
+  average_score: number;
+  highest_score: number;
+  pass_rate: number;
+  attempts: StudentAttemptHistoryItem[];
+  score_trend: ScoreTrendPoint[];
+}
+

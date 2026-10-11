@@ -27,6 +27,11 @@ export const ExamInstructionsPage: React.FC = () => {
   const { user } = useAuthStore();
 
   const [exam, setExam] = useState<Exam | null>(null);
+  const [activeAttempt, setActiveAttempt] = useState<{
+    has_active_attempt: boolean;
+    attempt_id?: string | null;
+    started_at?: string;
+  } | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,8 +61,23 @@ export const ExamInstructionsPage: React.FC = () => {
   const loadExam = async (id: string) => {
     try {
       setLoading(true);
-      const data = await examService.getExamById(id);
-      setExam(data);
+      const [dataRes, activeRes] = await Promise.allSettled([
+        examService.getExamById(id),
+        examService.checkActiveAttempt(id),
+      ]);
+
+      if (dataRes.status === "fulfilled") {
+        setExam(dataRes.value);
+      } else {
+        throw dataRes.reason;
+      }
+
+      if (activeRes.status === "fulfilled" && (activeRes.value.has_active_attempt || activeRes.value.has_active)) {
+        setActiveAttempt({
+          has_active_attempt: true,
+          attempt_id: activeRes.value.attempt_id,
+        });
+      }
     } catch (err: any) {
       console.error(err);
       setError("Unable to load examination details. Please return to dashboard.");
@@ -240,6 +260,38 @@ export const ExamInstructionsPage: React.FC = () => {
 
       {/* Main Content Layout */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-6">
+        {/* Active Attempt Resumption Alert */}
+        {activeAttempt?.has_active_attempt && activeAttempt?.attempt_id && (
+          <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs animate-pulse">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                <RefreshCw className="w-5 h-5 text-amber-700" />
+              </div>
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider bg-amber-200/80 px-2 py-0.5 rounded text-amber-900">
+                  In-Progress Session Detected
+                </span>
+                <h3 className="text-sm font-bold text-amber-950 mt-1">
+                  You already have an active attempt for this test.
+                </h3>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  Resuming will seamlessly reconnect to your session, preserving your answers and remaining timer without creating duplicate attempts.
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => {
+                stopMediaStream();
+                navigate(`/exams/${activeAttempt.attempt_id}/take`);
+              }}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 shrink-0 shadow-xs flex items-center gap-2"
+            >
+              <span>Resume Active Session</span>
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+
         {/* Banner with Exam Details */}
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
@@ -433,7 +485,11 @@ export const ExamInstructionsPage: React.FC = () => {
                   size="lg"
                   className="w-full font-bold shadow-md"
                 >
-                  <span>Begin Examination Now</span>
+                  <span>
+                    {activeAttempt?.has_active_attempt
+                      ? "Resume Examination Session"
+                      : "Begin Examination Now"}
+                  </span>
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
                 {!cameraGranted && (

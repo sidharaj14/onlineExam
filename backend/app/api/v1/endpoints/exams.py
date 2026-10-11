@@ -42,21 +42,66 @@ async def get_available_exams(db: AsyncSession = Depends(get_db)):
     return await ExamService.list_exams(db)
 
 @router.get("/{exam_id}", response_model=ExamSummaryResponse, summary="Get exam overview")
-async def get_exam_details(exam_id: str, db: AsyncSession = Depends(get_db)):
+async def get_exam_details(
+    exam_id: str,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """Retrieve single examination details."""
-    return await ExamService.get_exam_by_id(exam_id, db)
+    exam = await ExamService.get_exam_by_id(exam_id, db)
+    if current_user and current_user.role == "student":
+        from app.services.activity_service import ActivityService
+        await ActivityService.record_activity(
+            db=db,
+            user_id=current_user.id,
+            activity_type="EXAM_VIEWED",
+            title=f"Viewed instructions for {exam.title}",
+            description=f"Read examination rules and hardware guidelines ({exam.course_code}).",
+            exam_id=exam.id,
+            status="INFO",
+        )
+    return exam
+
+@router.get("/{exam_id}/active-attempt", summary="Check if student has an active in-progress attempt")
+async def check_active_attempt(
+    exam_id: str,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Check if candidate already has an in-progress session to resume."""
+    if not current_user:
+        return {"has_active": False, "attempt_id": None}
+    active_id = await ExamService.get_active_attempt_for_student(
+        exam_id=exam_id,
+        user_id=current_user.id,
+        email=current_user.email,
+        db=db,
+    )
+    return {
+        "has_active": active_id is not None,
+        "has_active_attempt": active_id is not None,
+        "attempt_id": active_id,
+    }
 
 @router.post("/{exam_id}/start", summary="Start exam attempt with camera verification snapshot")
 async def start_exam_attempt(
     exam_id: str,
     payload: StartExamRequest,
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Candidate starts examination after completing camera verification.
     Saves verification snapshot and initializes timer session.
     """
-    attempt_id = await ExamService.start_exam_attempt(exam_id, payload, db)
+    user_id = current_user.id if current_user else None
+    if current_user:
+        if current_user.full_name and payload.candidate_name == "Candidate":
+            payload.candidate_name = current_user.full_name
+        if current_user.email:
+            payload.candidate_email = current_user.email
+
+    attempt_id = await ExamService.start_exam_attempt(exam_id, payload, db, user_id=user_id)
     return {"status": "started", "attempt_id": attempt_id}
 
 @router.get("/attempts/{attempt_id}", response_model=ExamAttemptDetailResponse, summary="Get active exam attempt")

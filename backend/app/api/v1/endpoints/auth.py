@@ -128,6 +128,52 @@ async def request_otp_for_login(
     """
     return await request_login_otp(db, req.email)
 
+@router.post(
+    "/teacher/request-login-otp",
+    response_model=SendOtpResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Teacher: Request 6-digit sign-in OTP (Authorized faculty only)"
+)
+async def teacher_request_otp(
+    req: ResendOtpRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Validates whether the email belongs to an authorized teacher or administrator account.
+    If authorized, generates and dispatches a time-limited 6-digit OTP.
+    """
+    return await request_login_otp(db, req.email, role_filter=["teacher", "admin", "super_admin"])
+
+@router.post(
+    "/teacher/login-with-otp",
+    response_model=TokenResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Teacher: Authenticate using email and OTP (Authorized faculty only)"
+)
+async def teacher_login_with_otp(
+    req: VerifyOtpRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Verifies 6-digit OTP and authenticates authorized teacher/admin, returning JWT.
+    """
+    return await authenticate_with_otp(db, req.email, req.otp_code, required_role=["teacher", "admin", "super_admin"])
+
+@router.post(
+    "/teacher/login",
+    response_model=TokenResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Teacher: Authenticate with password (Authorized faculty only)"
+)
+async def teacher_login_password(
+    req: LoginRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Authenticates authorized teacher/admin via password or OTP.
+    """
+    return await authenticate_user(db, req, required_role=["teacher", "admin", "super_admin"])
+
 @router.get(
     "/me",
     response_model=UserResponse,
@@ -171,3 +217,27 @@ async def reset_password(
     Verifies the password reset OTP and updates the user's password.
     """
     return await reset_password_with_otp(db, req.email, req.otp_code, req.new_password)
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_200_OK,
+    summary="Record student logout event"
+)
+async def logout_user(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Records reliable logout activity event in database.
+    """
+    from app.services.activity_service import ActivityService
+    await ActivityService.record_activity(
+        db=db,
+        user_id=current_user.id,
+        activity_type="LOGOUT",
+        title="Logged out",
+        description=f"User {current_user.full_name} signed out.",
+        status="INFO"
+    )
+    return {"message": "Logged out successfully"}
+

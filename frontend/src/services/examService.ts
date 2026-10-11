@@ -122,5 +122,38 @@ export const examService = {
     const response = await api.get(`/exams/student/analytics?${params.toString()}`);
     return response.data;
   },
+
+  getStudentFullDashboard: async (): Promise<any> => {
+    const response = await api.get("/students/me/dashboard");
+    return response.data;
+  },
+
+  getStudentAttemptsList: async (status?: string): Promise<any[]> => {
+    const params = new URLSearchParams();
+    if (status && status !== "all") params.append("status", status);
+    const response = await api.get(`/students/me/attempts?${params.toString()}`);
+    return response.data;
+  },
+
+  getStudentActivityTimeline: async (limit: number = 20): Promise<any[]> => {
+    const response = await api.get(`/students/me/activity?limit=${limit}`);
+    return response.data;
+  },
+
+  checkActiveAttempt: async (
+    examId: string
+  ): Promise<{ has_active: boolean; has_active_attempt: boolean; attempt_id: string | null }> => {
+    const response = await api.get(`/exams/${examId}/active-attempt`);
+    return {
+      has_active: response.data.has_active ?? response.data.has_active_attempt ?? false,
+      has_active_attempt: response.data.has_active_attempt ?? response.data.has_active ?? false,
+      attempt_id: response.data.attempt_id ?? null,
+    };
+  },
+
+  logoutUser: async (): Promise<{ message: string }> => {
+    const response = await api.post("/auth/logout");
+    return response.data;
+  },
 };
 
